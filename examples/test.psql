@@ -1,5 +1,5 @@
 --
--- SQL comand to create the tables need by the test.pl script
+-- SQL comand to create the tables need by the test scripts
 -- 
 CREATE TABLE Class (
 	Id SERIAL PRIMARY KEY,

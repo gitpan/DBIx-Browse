@@ -1,5 +1,5 @@
 #
-# $Id: Browse.pm,v 2.8 2002/05/01 11:30:13 evilio Exp $
+# $Id: Browse.pm,v 2.9 2002/12/10 09:17:20 evilio Exp $
 #
 package DBIx::Browse;
 
@@ -19,7 +19,7 @@ require Exporter;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 2.8 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 2.9 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # new
@@ -893,7 +893,7 @@ I<linked_table>, and I<linked_values> in the B<new> method).
 The DBI driver to use MUST allow to set I<AutoCommit> to zero.
 
 The syntax construction of queries have only been tested against
-PostgreSQL and MySQL.
+PostgreSQL and MySQL (DBD::mysql version 2.0416 onwards).
 
 Not all the clauses are supported by all DBI drivers. In particular,
 the "LIMIT" and "OFFSET" ones are non SQL-standard and have been only

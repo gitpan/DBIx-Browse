@@ -4,7 +4,8 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
 	      'NAME'      => 'DBIx::Browse',
 	      'PREREQ_PM' => {
-		  'DBI'		=> '1.00'
+		  'DBI'		=> '1.00',
+                  'Test::More'  => '0.45'
 		  },
 	      'VERSION_FROM' => 'Browse.pm', # finds $VERSION
 );

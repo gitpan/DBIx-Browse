@@ -1,5 +1,5 @@
 #
-# sql comand to create the tables need by the test.pl script
+# sql comand to create the tables need by the test scripts
 # 
 create table class (
 	id integer auto_increment primary key,

@@ -1,5 +1,5 @@
 #
-# $Id: Browse.pm,v 1.23 2002/02/26 11:47:57 evilio Exp $
+# $Id: Browse.pm,v 1.24 2002/02/27 17:32:13 evilio Exp $
 #
 package DBIx::Browse;
 
@@ -20,7 +20,7 @@ require Exporter;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 1.23 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 1.24 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # new
@@ -433,7 +433,7 @@ sub field_values {
 	$table = $self->{linked_tables}->[$field];
     }
 
-    my $q = 'SELECT  '.$fname.' FROM '.$table.' ORDER BY '.$fname.';';
+    my $q = 'SELECT  DISTINCT '.$fname.' FROM '.$table.' ORDER BY '.$fname.';';
 
     #$self->debug('Field Values:'.$q);
 
@@ -813,7 +813,7 @@ sub edit_form {
     foreach my $f ( @forder ) {
 	$style = $self->style_class($f);
 	my $tf = {
-	    -name    => $fnames[$f],
+	    -name    => $columns[$f],
 	    -default => $row->{$columns[$f]},
 	};
 	if ($flength[$f]) {$tf->{'-size'} = $flength[$f]};
@@ -824,7 +824,7 @@ sub edit_form {
 	    $q->start_td( {-class => "$style"} );
 	if ($f < @{$self->{non_linked}} ) {
 	    # Set the param
-	    $q->param(-name  => $fnames[$f],
+	    $q->param(-name  => $columns[$f],
 		      -value => $row->{$columns[$f]});
 	    print $q->textfield($tf);
 	#    print
@@ -835,11 +835,11 @@ sub edit_form {
 	    ### value list ###
 	    my $fvalues = $self->field_values($f);
 	    # Set the param
-	    $q->param(-name  => $fnames[$f],
+	    $q->param(-name  => $columns[$f],
 		      -value => $row->{$columns[$f]});
 	    # PopUp
 	    print $q->popup_menu(
-				-name     => $fnames[$f],
+				-name     => $columns[$f],
 				-values   => $fvalues,
 				-default  => $row->{$columns[$f]},
 				);
@@ -1154,7 +1154,7 @@ sub die {
 # cvsid
 #
 sub cvsid {
-    my $cvs     = q[ $Id: Browse.pm,v 1.23 2002/02/26 11:47:57 evilio Exp $ ];
+    my $cvs     = q[ $Id: Browse.pm,v 1.24 2002/02/27 17:32:13 evilio Exp $ ];
     my $version = ( $cvs =~ m/\$Id:\s+\S+\s+(\d+\.\d+)+\s+.*/);
     return $version;
 }

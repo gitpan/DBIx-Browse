@@ -1,5 +1,5 @@
 #
-# $Id: CGI.pm,v 0.6 2002/04/29 15:41:08 evilio Exp $
+# $Id: CGI.pm,v 0.7 2002/05/01 11:34:40 evilio Exp $
 #
 package DBIx::Browse::CGI;
 
@@ -20,7 +20,7 @@ require DBIx::Browse;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 0.6 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 0.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # init
@@ -30,11 +30,12 @@ sub init {
     my $param = shift;
 
     my ( $cgi, $maxrows, $maxflength, $default_action,
-	 $styles, $form_params, $noprint);
+	 $styles, $form_params, $order, $noprint);
 
     $cgi        = $param->{cgi} || new CGI;
     $maxrows    = $param->{max_rows} || 10;
-    $maxflength =  $param->{max_flength} || 40;
+    $maxflength = $param->{max_flength} || 40;
+    $order      = $param->{row_order} || '';
     $default_action = $param->{default_action} || 'List';
     $form_params    = $param->{form_params} || {};
     $styles         = $param->{styles} || [ 'Even','Odd'];
@@ -49,6 +50,7 @@ sub init {
 	};
     $self->{default_action} = $default_action;
     $self->{form_params}    = $form_params;
+    $self->{row_order}      = $order;
     $self->{styles}         = $styles;
     $self->{noprint}        = $noprint;
     $self->{cgi_buffer}    = '';
@@ -126,16 +128,18 @@ sub list_form {
 	$rec = $last - $self->{max_rows} + 1;
     }
 
+    $self->debug("Rec: $rec, Last: $last, Max: $self->{max_rows}");
+
     $rec = ($rec <= ($last-$self->{max_rows}+1)) ? $rec : $last-$self->{max_rows}+1;
     $rec = ($rec < 0 ) ? 0 : $rec;
 
     my $sth = $self->prepare({
 	where  => "$where",
-	order  => $self->pkey_name.' ASC ',
+	order  => $self->row_order,
 	limit  => $self->{max_rows},
 	offset => "$rec"
-	});
-    $sth->execute();
+	}) or $self->die();;
+    $sth->execute() or $self->die();;
 
 
     $q->param(-name => 'record_number', -value => "$rec" );
@@ -303,7 +307,7 @@ sub edit_form {
 
     my $sth = $self->prepare({
 	where  => $where,
-	order  => $self->pkey_name.' ASC ',
+	order  => $self->row_order,
 	limit  => 1,
 	offset => "$rec"
 	})  or $self->die();
@@ -412,9 +416,18 @@ sub edit_form {
 
 
     $self->add_request(
-	$self->open_form($rec),
-	$q->hidden( -name  => 'where_clause' ),
-	$q->start_table);
+		       $self->open_form($rec),
+		       $q->hidden( -name  => 'where_clause' ));
+    # include search info
+    foreach my $f ( @forder ) {
+	$self->add_request(
+			   $q->hidden({
+			       -name => 'search.'.$columns[$f]
+			       })
+			   );
+    }
+
+    $self->add_request($q->start_table);
 
     my $style;
     foreach my $f ( @forder ) {
@@ -683,6 +696,17 @@ sub print_error {
 }
 
 #
+# row_order
+#
+sub row_order {
+    my $self  = shift;
+    my $order = $self->pkey_name.' ASC ';
+    $order = $self->{row_order}.', '.$order
+	if $self->{row_order};
+    return $order;
+}
+
+#
 # add to request
 #
 sub add_request {
@@ -786,6 +810,10 @@ The maximum number of rows to be displayed per Web page (default: 10).
 
 The maximum field length to be displayed (also the default for unknown
 field lengths).
+
+=item I<row_order>
+
+The order to be used to order rows (e.g. 'NAME ASC, DATE DESC').
 
 =item I<default_action>
 

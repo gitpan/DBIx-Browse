@@ -1,5 +1,5 @@
 #
-# $Id: Browse.pm,v 2.7 2002/03/17 12:31:38 evilio Exp $
+# $Id: Browse.pm,v 2.8 2002/05/01 11:30:13 evilio Exp $
 #
 package DBIx::Browse;
 
@@ -19,7 +19,7 @@ require Exporter;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 2.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 2.8 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # new
@@ -673,7 +673,7 @@ DBIx::Browse - Perl extension to browse tables.
 });
 
     ## Insert a record
-    $dbixbr->add({
+    $dbixbr->insert({
 	name       => 'John',
         department => 'Sales',
         category   => 'Sales Representant',

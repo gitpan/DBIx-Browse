@@ -1,0 +1,8 @@
+Revision history for Perl extension DBIx::Browse.
+
+1.23  Tue Feb 26 13:54:00 2002
+	- First release to CPAN
+
+0.01  Mon Sep  4 15:34:52 2000
+	- original version; created by h2xs 1.19
+

@@ -1,5 +1,5 @@
 #
-# $Id: CGI.pm,v 0.3 2002/03/07 13:45:34 evilio Exp $
+# $Id: CGI.pm,v 0.6 2002/04/29 15:41:08 evilio Exp $
 #
 package DBIx::Browse::CGI;
 
@@ -7,7 +7,7 @@ use strict;
 use diagnostics;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 
-use CGI;
+use CGI qw( -no_debug );
 use CGI::Carp;
 
 require Exporter;
@@ -20,7 +20,7 @@ require DBIx::Browse;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 0.3 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 0.6 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # init
@@ -30,7 +30,7 @@ sub init {
     my $param = shift;
 
     my ( $cgi, $maxrows, $maxflength, $default_action,
-	 $styles, $form_params);
+	 $styles, $form_params, $noprint);
 
     $cgi        = $param->{cgi} || new CGI;
     $maxrows    = $param->{max_rows} || 10;
@@ -38,6 +38,7 @@ sub init {
     $default_action = $param->{default_action} || 'List';
     $form_params    = $param->{form_params} || {};
     $styles         = $param->{styles} || [ 'Even','Odd'];
+    $noprint        = $param->{no_print} || 0;
 
     $self->{cgi}   = $cgi;
     $self->{max_rows}    = $maxrows;
@@ -49,20 +50,22 @@ sub init {
     $self->{default_action} = $default_action;
     $self->{form_params}    = $form_params;
     $self->{styles}         = $styles;
+    $self->{noprint}        = $noprint;
+    $self->{cgi_buffer}    = '';
     #
     # This must be last
     #
     $self->SUPER::init( $param );
-
 }
 
 #
 # list_form
 #
 sub list_form {
-    my $self  = shift;
-    my $param = shift || {};
-    my $q = $self->{cgi};
+    my $self   = shift;
+    my $param  = shift || {};
+    my $q      = $self->{cgi};
+    my $string = '';
     my @columns;
     my @fnames;
     my @forder;
@@ -164,54 +167,56 @@ sub list_form {
     $self->debug('Number of rows: '.$sth->rows());
 
 
-    print
+    $self->add_request(
 	$self->open_form($rec),
 	$q->hidden( -name  => 'where_clause' ),
-	$q->start_table,"\n";
+	$q->start_table);
 
-    print
+    $self->add_request(
 	$q->script({-language => 'JavaScript'},
 		   "
 function set_rc(f, i) {f.record_number.value = Number(f.record_number.value)+i; return true;}
 function zero_rec(f) {f.record_number.value = 0;}\n" 
-		   );
+		   ));
 
-    print
+    $self->add_request(
 	$q->start_Tr,"\n",
-	$q->td('&nbsp;');
+	$q->td('&nbsp;'));
     foreach my $f ( @forder ) {
-	print $q->th(ucfirst($fnames[$f])),"\n";
+	$self->add_request( $q->th(ucfirst($fnames[$f])));
     }
-    print
-	$q->end_Tr,"\n";
+    $self->add_request(
+	$q->end_Tr);
 
     my $style;
     for (my $i = 0; $i < $sth->rows && $i < $self->{max_rows}; $i++) {
 	$style = $self->style_class($i);
 	if ( $row = $sth->fetchrow_hashref('NAME_lc') ) {
-	    print $q->start_Tr(),"\n";
-	    print $q->td({-class => 'Bar'},
+	    $self->add_request( $q->start_Tr());
+	    $self->add_request( $q->td({-class => 'Bar'},
 			 $q->submit(
 				    -name    => 'Page',
 				    -value   => 'Edit',
 				    -onClick => "set_rc(this.form, $i);"
 				    )
 				    
-			 );
+			 ));
 	    foreach my $f ( @forder ) {
-		print
+		my $v = defined($row->{$columns[$f]}) ? 
+		    $row->{$columns[$f]} : '&nbsp;';
+		$self->add_request(
 		    $q->td( { -class => "$style"},
-			   $row->{$columns[$f]} || ''
-			   ),"\n";
+			    $v
+			    ));
 	    }
-	    print $q->end_Tr(),"\n";
+	    $self->add_request( $q->end_Tr());
 	}
     }
 
     
-    print
+    $self->add_request(
 	$q->start_Tr,"\n",
-	$q->td('&nbsp');
+	$q->td('&nbsp'));
 
     foreach my $f ( @forder ) {
 	my $tf = {-name => 'search.'.$columns[$f],
@@ -219,30 +224,32 @@ function zero_rec(f) {f.record_number.value = 0;}\n"
 		  };
 	if ($flength[$f]) {$tf->{'-size'} = $flength[$f]};
 
-	print $q->td(
+	$self->add_request( $q->td(
 		     $q->textfield($tf)
-		     ),"\n";
+		     ));
     }
-    print
-	$q->end_Tr,"\n";
+    $self->add_request(
+	$q->end_Tr);
 
-    print
+    $self->add_request(
 	$q->start_Tr,
 	$q->td('&nbsp'),
 	$q->start_td( {
 	    -colspan => scalar @fnames,
 	    -align   => 'center'
-		       }),"\n";
+		       }));
 
     $self->navigator('List');
 
-    print
+    $self->add_request(
 	$q->end_td,
-	$q->end_Tr;
+	$q->end_Tr);
 
-    print
-	$q->end_table,"\n";
-	$self->close_form;
+    $self->add_request(
+	$q->end_table,
+	$self->close_form);
+    # print page
+    $self->flush;
 }
 
 #
@@ -404,10 +411,10 @@ sub edit_form {
 
 
 
-    print
+    $self->add_request(
 	$self->open_form($rec),
 	$q->hidden( -name  => 'where_clause' ),
-	$q->start_table,"\n";
+	$q->start_table);
 
     my $style;
     foreach my $f ( @forder ) {
@@ -418,18 +425,15 @@ sub edit_form {
 	};
 	if ($flength[$f]) {$tf->{'-size'} = $flength[$f]};
 
-	print
+	$self->add_request(
 	    $q->start_Tr,"\n",
 	    $q->th(ucfirst($fnames[$f])),"\n",
-	    $q->start_td( {-class => "$style"} );
+	    $q->start_td( {-class => "$style"} ));
 	if ($f < @{$self->{non_linked}} ) {
 	    # Set the param
 	    $q->param(-name  => $columns[$f],
 		      -value => $row->{$columns[$f]});
-	    print $q->textfield($tf);
-	#    print
-	#	$q->comment("Field: ".$fnames[$f].
-	#		    ", Value: ".$row->{$columns[$f]});
+	    $self->add_request( $q->textfield($tf));
 	}
 	else {
 	    ### value list ###
@@ -438,47 +442,44 @@ sub edit_form {
 	    $q->param(-name  => $columns[$f],
 		      -value => $row->{$columns[$f]});
 	    # PopUp
-	    print $q->popup_menu(
+	    $self->add_request( $q->popup_menu(
 				-name     => $columns[$f],
 				-values   => $fvalues,
 				-default  => $row->{$columns[$f]},
-				);
-	    # debug comment
-	    #print
-	    #   $q->comment("Field: ".$fnames[$f].
-	    #	    ", Value: ".$row->{$columns[$f]});
+				));
 	}
-	print
-	    $q->end_td,"\n";
-	print
-	    $q->end_Tr,"\n";
+	$self->add_request(
+			   $q->end_td,"\n",$q->end_Tr
+			   );
     }
     # Editor
-    print
+    $self->add_request(
 	$q->start_Tr,
 	$q->start_td( {
 	    -colspan => 2,
-	    -align   => 'center'		       }),"\n";
+	    -align   => 'center'		       }));
     $self->editor();
-    print
+    $self->add_request(
 	$q->end_td,
-	$q->end_Tr;
+	$q->end_Tr);
     #Navigator
-    print
+    $self->add_request(
 	$q->start_Tr,
 	$q->start_td( {
 	    -colspan => 2,
 	    -align   => 'center'
-		       }),"\n";
+		       }));
     $self->navigator('Edit');
-    print
+    $self->add_request(
 	$q->end_td,
-	$q->end_Tr;
+	$q->end_Tr);
     # End table
-    print
-	$q->end_table,"\n";
+    $self->add_request(
+	$q->end_table);
 
     $self->close_form;
+    # print page
+    $self->flush;
 }
 
 #
@@ -522,9 +523,9 @@ sub navigator {
 
     $q->param( -name => 'Page', -value => $page);
 
-    print
-	$q->start_table( -align => 'CENTER' ),"\n";
-    print
+    $self->add_request(
+	$q->start_table( -align => 'CENTER' ));
+    $self->add_request(
 	$q->hidden(-name => 'Page'),"\n",
 	$q->Tr({ -class => 'Bar'}, "\n",
 	       $q->td( { -class => 'Bar'},
@@ -551,9 +552,9 @@ sub navigator {
 				 -value => 'Last'
 				 )
 		      )
-	       ),"\n";	
-    print
-	$q->end_table;
+	       ));	
+    $self->add_request(
+	$q->end_table);
 }
 
 #
@@ -562,9 +563,9 @@ sub navigator {
 sub editor {
     my $self  = shift;
     my $q     = $self->{cgi};
-    print
-	$q->start_table( -align => 'CENTER' ),"\n";
-    print
+    $self->add_request(
+	$q->start_table( -align => 'CENTER' ));
+    $self->add_request(
 	$q->Tr({ -class => 'Bar'}, "\n",
 	       $q->td({ -class => 'Bar'},
 		      $q->submit(
@@ -604,9 +605,9 @@ sub editor {
 				 -onClick => "this.form.Page.value = 'List';"
 				 )
 		      )
-	       ),"\n";
-    print
-	$q->end_table;
+	       ));
+    $self->add_request(
+	$q->end_table);
 }
 
 #
@@ -650,13 +651,23 @@ sub debug {
     my $self = shift;
     return (0) unless $self->{debug};
     my $txt  = shift;
-    print $self->{cgi}->p({-class => 'Debug'},
+    $self->add_request( $self->{cgi}->p({-class => 'Debug'},
 			   $txt
-			  ) if ($txt);
+			  )) if ($txt);
     return 1;
 }
+
 #
 # print
+#
+sub print {
+    my ($self, @args) = @_;
+    print @args
+	unless($self->{no_print});
+}
+
+#
+# print error
 #
 sub print_error {
     my $self  = shift;
@@ -664,9 +675,34 @@ sub print_error {
     my $q     = $self->{cgi};
 
     foreach my $er ( split(/\n/m, $error)) {
-	print $q->p({-Class => 'Error'}, $er);
+	$self->add_request( $q->p({-Class => 'Error'}, $er));
     }
-    print $q->end_html();
+    $self->add_request( $q->end_html());
+    # print page
+    $self->flush;
+}
+
+#
+# add to request
+#
+sub add_request {
+    my $self    = shift;
+    my @strings = @_;
+    foreach my $s ( @strings ) {
+	$self->{cgi_buffer} .= $s."\n";
+    }
+}
+#
+# flush
+#
+sub flush {
+    my $self    = shift;
+    my $request = $self->{cgi_buffer};
+
+    print $request
+	unless ($self->{noprint});
+    $self->{cgi_buffer} = '';
+    return $request;
 }
 
 #########################################################################
@@ -724,7 +760,7 @@ the detail table has a reference (FOREIGN KEY) to a generic table
 
 =head1 METHODS
 
-All the inherited methods inherited from its parent class
+All the methods inherited from its parent class
 (DBIX::Browse(3)) plus the following:
 
 =over 4
@@ -732,7 +768,8 @@ All the inherited methods inherited from its parent class
 =item B<new>
 
 Creates a new DBIx::Browse::CGI object. The parameters are passed
-through a hash with the following added keys:
+through a hash with the following added keys with respect to
+B<DBIx::Browse::new>:
 
 =over 4
 
@@ -765,6 +802,12 @@ A hash ref containing other form parameters that will appear as
 An anonymous arrays of css styles ("CLASS") that will be applied to
 succesive rows of output.
 
+=item I<no_print>
+
+If set, the output methods (B<list_form>, B<edit_form>, and B<browse>)
+will not print directly. Instead, they will return a string containig
+the output (in fact they always do). Otherwise they will print
+directly to standard output (default: 0).
 
 =back
 
@@ -772,7 +815,7 @@ succesive rows of output.
 
 This method produces a CGI form suitable to explore the main table. It
 will list its rows in chunks of I<max_rows>. It will present also the
-possibility to edit (see B<edit_register>) any row and to filter the rows
+possibility to edit (see B<edit_form>) any row and to filter the rows
 to display.
 
 It takes one optional parameter with a hash reference with the following keys:

@@ -1,5 +1,5 @@
 #
-# $Id: Browse.pm,v 2.2 2002/03/07 13:45:34 evilio Exp $
+# $Id: Browse.pm,v 2.7 2002/03/17 12:31:38 evilio Exp $
 #
 package DBIx::Browse;
 
@@ -19,7 +19,7 @@ require Exporter;
 #
 # Keep Revision from CVS and Perl version in paralel.
 #
-$VERSION = do { my @r=(q$Revision: 2.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 2.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 #
 # new
@@ -42,9 +42,13 @@ sub init {
     my ($dbh, $table, $pkey, $pfields, $lfields , $ltables, $lvalues,
 	$lrefs, $lalias, $debug);
 
-    $dbh        = $param->{dbh}   or croak 'No database handler.';
+    $dbh        = $param->{dbh};
+    croak 'No database handler.'
+	unless (   UNIVERSAL::isa($dbh, 'DBI::db') );
+
     $table      = $param->{table} or croak 'No table to browse.';
     $pkey       = $param->{primary_key} || 'id';
+
     $pfields    = $param->{proper_fields};
     $lfields    = $param->{linked_fields};
     $ltables    = $param->{linked_tables};
@@ -53,6 +57,9 @@ sub init {
     $lalias     = $param->{aliases};
     $debug      = $param->{debug};
 
+    
+
+    # try to set autocommit to 0
     $self->{dbh}   = $dbh;    
     eval { $self->{dbh}->{AutoCommit} = 0; };
     $self->die() if ($dbh->{AutoCommit}); 
@@ -87,48 +94,82 @@ sub init {
 	}
     }
 
+    #
+    # croak if mismatched parameters present
+    #
+    my $croak_txt = sub { my ($par,$par_ref) = @_; return "Parameter $par (if present) must have the same numbers of elements than $par_ref"; };
+
+    # linked_tables
     if ( ! $ltables ) {
 	$ltables = $self->{linked_fields};
     }
+    elsif ( $self->{single} ||
+	    scalar(@$ltables) != scalar(@{$self->{linked_fields}})
+	    ) {
+	croak $croak_txt->('linked_tables','linked_fields');
+    }
     $self->{linked_tables} = [map {lc($_)} @$ltables];
 
+    # nuber of linked tables.
     my $n_ltables = 0;
     if ( $ltables ) {
 	$n_ltables = scalar(@$ltables);
     }
 
+    # linked_values
     if ( ! $lvalues && $n_ltables ) {
 	my $names = 'name,' x $n_ltables;
 	my @lvalues =  split(/,/, $names, $n_ltables);
 	$lvalues[$n_ltables-1] =~ s/,$//;
 	$lvalues = \@lvalues;
     }
+    elsif ( $lvalues       && (
+	    $self->{single} ||
+	    scalar(@$lvalues) != scalar(@{$self->{linked_fields}}))
+	    ) {
+	croak $croak_txt->('linked_values','linked_fields');
+    }
     $self->{linked_values} = [map {lc($_)} @$lvalues];
 
+    # linked_refs
     if ( ! $lrefs && $n_ltables ) {
 	my $ids =  'id,' x $n_ltables;
 	my @lrefs = split( /,/, $ids, $n_ltables);
 	$lrefs[$n_ltables-1] =~ s/,$//;
 	$lrefs = \@lrefs;
     }
+    elsif ( $lrefs && (
+	    $self->{single} || 
+	    scalar(@$lrefs) != scalar(@{$self->{linked_fields}}))
+	   ) {
+	croak($croak_txt->('linked_refs','linked_fields'));
+    }
+    $self->{linked_refs} = [map {lc($_)} @$lrefs];
 
+    # aliases (fields)
     if ( ! $lalias) {
 	$lalias = [@{$self->{non_linked}}, @{$self->{linked_tables}} ]
     }
+    elsif ( scalar(@$lalias) != $n_ltables+1) {
+	croak $croak_txt->('linked_refs','linked_fields plus one');
+    }
     $self->{aliases} = [map {lc($_)} @$lalias];
 
-    $self->{linked_refs} = [map {lc($_)} @$lrefs];
 
+    #
+    # table aliases: we need them to assure that the same table can be included
+    # two or more times.
+    #
     my $table_alias = 'AAA';
     $self->{table_aliases} = [ "$table_alias" ];
     foreach my $t ( @{$self->{linked_tables}} ) {
 	$table_alias++; # How nice is perl
 	push(@{$self->{table_aliases}}, $table_alias);
     }
-
 }
+
 #
-# query_fields
+# query_fields: fields to be SELECTed by the prepare
 #
 sub query_fields {
     my $self = shift;
@@ -157,8 +198,9 @@ sub query_fields {
 
     return $query;
 }
+
 #
-# query_tables
+# query_tables: FROM clase in prepare
 #
 sub query_tables {
     my $self = shift;
@@ -195,7 +237,7 @@ sub query_tables {
 }
 
 #
-# query
+# query: minimal query for prepare
 #
 sub query {
     my $self = shift;
@@ -211,7 +253,7 @@ sub query {
 
 
 #
-# count 
+# count: count fields (with prepare)
 #
 sub count {
     my $self   = shift;
@@ -229,7 +271,7 @@ sub count {
 }
 
 #
-# prepare
+# prepare: prepare a query with the fields, FROM clause and WHERE prebuilt
 #
 sub prepare {
     my $self  = shift;
@@ -276,7 +318,8 @@ sub prepare {
 }
 
 #
-# unalias_fields
+# unalias_fields: used to specify a field as table_alias.fieldname instead of
+# field alias, i.e.: AAB.name instead of 'department' or 'department.name'.
 #
 sub unalias_fields {
     my $self   = shift;
@@ -317,7 +360,9 @@ sub unalias_fields {
 }
 
 #
-# demap
+# demap: translate linked_tables.linked_values to 
+#  table.linked_fields (linked_refs).
+#  used by add() and update().
 #
 sub demap {
     my $self = shift;
@@ -351,7 +396,7 @@ sub demap {
 }
 
 #
-# insert
+# insert: insert a record into the main table.
 #
 sub insert {
     my $self = shift;
@@ -381,7 +426,7 @@ sub insert {
 }
 
 #
-# update
+# update: update a row in the main table.
 #
 sub update {
     my $self  = shift;
@@ -412,7 +457,7 @@ sub update {
 }
 
 #
-# delete
+# delete: delete a record in the main table).
 #
 sub delete {
     my $self  = shift;
@@ -429,7 +474,7 @@ sub delete {
 }
 
 #
-# fields
+# fields: list of fields (aliases)
 #
 sub fields {
     my $self   = shift;
@@ -443,7 +488,7 @@ sub fields {
 }
 
 #
-# field_values
+# field_values: obtain a list of possible field values for a linked field.
 #
 sub field_values {
     my $self  = shift;
@@ -484,12 +529,15 @@ sub pkey_name {
 }
 
 #
-# set_syntax
+# set_syntax: set some syntax specific to some drivers. This include,
+# clause order, clause construction (LIMIT and OFFSET), ILIKE
+# construction and globbing character.
 #
 sub set_syntax {
 
     my $self = shift;
 
+    # generic  clause order
     $self->{syntax_order} = {
 	1 => 'where',
 	2 => 'group',
@@ -499,7 +547,7 @@ sub set_syntax {
 	6 => 'offset'
 	};
 
-
+    # generic syntax 
     $self->{syntax} = {
 	'where'  => ' AND ',
 	'group'  => ' GROUP BY ',
@@ -508,24 +556,31 @@ sub set_syntax {
 	'limit'  => ' LIMIT ',
 	'offset' => ' OFFSET ',
 	'ilike'  => ' ~*  ',
-	'glob'   => ''
+	'glob'   => '%'
 	};
 
     #
     # Standards? Ha!
     #
+    # mysql: the LIMIT OFFSET clauses are LIMIT [offset],limit; the LIKE
+    # is an ILIKE.
+    #
     if ( $self->{dbh}->{Driver}->{Name} =~ m/mysql/i ) {
 	$self->{syntax}->{limit}  = ',';
 	$self->{syntax}->{offset} = ' LIMIT ';
 	$self->{syntax}->{ilike}  = ' LIKE ';
-	$self->{syntax}->{glob}   = '%';
 	$self->{syntax_order}->{5} = 'offset';
 	$self->{syntax_order}->{6} = 'limit';
+    } # postgres: (I)LIKE uses regular expression operator
+    elsif ( $self->{dbh}->{Driver}->{Name} =~ m/pg/i ) {
+	$self->{syntax}->{ilike} = ' ~* ';
+	$self->{syntax}->{glob}   = '';
     }
+    # put yours here...
 }
 
 #
-# debug
+# debug: print debug.
 #
 sub debug {
     my $self = shift;
@@ -537,7 +592,7 @@ sub debug {
 }
 
 #
-# sprint
+# sprint: dump the internal structure.
 #
 sub sprint {
     my $self = shift;
@@ -561,7 +616,7 @@ sub sprint {
 }
 
 #
-#
+# die: die from database errors printing the error.
 #
 sub die {
     my $self = shift;
@@ -579,7 +634,7 @@ sub die {
 }
 
 #
-# print_error
+# print_error: print an error.
 #
 sub print_error {
     my $self  = shift;
@@ -845,6 +900,11 @@ the "LIMIT" and "OFFSET" ones are non SQL-standard and have been only
 tested in PostgresSQL and MySQL (in this later case, no especific
 OFFSET clause exists but the DBIx::Browse simulates it by setting
 accordingly the "LIMIT" clause).
+
+=head1 BUGS
+
+This is beta software. Please, send any comments or bug reports to the author
+or visit http://sourceforge.net/projects/dbix-browse/
 
 =head1 AUTHOR
 

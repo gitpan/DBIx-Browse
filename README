@@ -1,5 +1,5 @@
 
-DBIx::Browse - Module to browse related tables with a CGI interface.
+DBIx::Browse - Module to browse related tables.
 (c) Copyright 2000 Evilio José del Río Silván <edelrio@icm.csic.es>
 
 
@@ -22,7 +22,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 Description
 -----------
 
-DBIx::Browse is a module to facilitate the Web browsing (INSERT,
+DBIx::Browse is a module to facilitate the browsing (INSERT,
 UPDATE and DELETE) of related database tables.
 
 Build and Install
@@ -36,21 +36,28 @@ make
 make test
 make install
 
+NOTE: To perform all tests, including inserting, updating and deleting
+some rows, you need to set two environment variables:
 
+DBI_DSN	: The DBI(3) default Data Source Name (see DBI(3)).
+
+DBIX_BROWSE_MAKE_TEST : If set to some true value, the tests will be performed.
+
+These tests expect to find in the databese pointed by DBI_DSN two
+tables as described by the examples/test.psql. This file is written in
+Postgres dialect but can be adapted easily to others. Be careful since
+the operations performed by the test could destroy some valuable
+information (that's why I require a special environment variable to be
+set before connecting to DBI).
 
 Usage Overview
 --------------
 
-Basically, you must write a CGI script (whit the use of the CGI
-module) with an active DBI connection. Then you use DBIx::Browse to
-browse a given table. You can look at the file DemoDBIxBrowse to see
-an example.
 
          use DBIx::Browse;
          my ($dbh, $dbb, $q);
          $dbh = DBI->connect("DBI:Pg:dbname=enterprise")
            or croak "Can't connect to database: $@";
-        $q   = new CGI;
         $dbb = new  DBIx::Browse({
            dbh => $dbh,
            table => 'employee',
@@ -58,25 +65,42 @@ an example.
            linked_fields => [ qw ( department category office ) ],
            linked_tables => [ qw ( department category office ) ],
            linked_values => [ qw ( name       name     phone  ) ],
-           linked_refs   => [ qw ( id         id       ide    ) ],
+           linked_refs   => [ qw ( id         id       id    ) ],
            aliases       => [ qw ( name fname department category phone )],
-           primary_key   => 'id',
-           cgi           => $q
+           primary_key   => 'id'
        });
-        print
-           $q->start_html(
-                          -title => "Test DBIx::Browse"
-                          );
-        $dbb->list_form({
-           field_order  => [  1,  0,  4,  3,  2 ],
-           field_length => [ 14, 15, 15, 15, 10 ]
-        });
+
+
+       $my $sth = $db->prepare({
+	 where => "departament = 'Adminitstration' AND age < 35",
+         order => "name ASC, departament ASC"
+	}
+
+       
+       $dbb->insert({
+	 name => 'Doe',
+         fname => 'John',
+	 department => 'Sales',
+	 category   => 'Sales representatn',
+	 phone      => '1114'
+	});
+
+	$dbb->update({
+	   category => 'Sales manager',
+	   phone => '1113'
+	},
+	" id = 1 "
+	);
+
 
        ...etc
 
 
 
+Examples
+--------
 
+See the directory examples and the test.pl script in this distribution.
 
 
 Author
